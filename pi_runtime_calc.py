@@ -1,5 +1,15 @@
 #!/usr/bin/env python2
-"""Calculate the compute-hours used by given Arvados pipeline instance(s)."""
+"""Calculate the compute-hours used by given Arvados pipeline instance(s).
+
+Usage: pi_runtime_calc.py instance_uuid [instance_uuid ...]
+
+This tool will walk the components of a pipeline instance, and generate a CSV
+on stdout with information about how much time nodes were allocated for each
+component, and the size(s) of those nodes.
+
+NOTE: This tool currently only knows how to determine node sizes for
+pipeline instances run on Azure clouds with D-class v2 node sizes.
+"""
 
 from __future__ import absolute_import
 from __future__ import division
