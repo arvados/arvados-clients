@@ -93,11 +93,14 @@ class Job(ArvadosObject):
         else:
             return max(base, setting)
 
-    def runtime(self):
-        node_count = self.constraint('min_nodes', 1)
+    def clock_time(self):
         start_time = parse_ts(self.started_at)
         end_time = parse_ts(self.finished_at)
-        return (end_time - start_time) * node_count
+        return end_time - start_time
+
+    def node_time(self):
+        node_count = self.constraint('min_nodes', 1)
+        return self.clock_time() * node_count
 
     def node_size(self):
         return SIZE_LIST.cheapest_size(self).name
@@ -106,16 +109,17 @@ class Job(ArvadosObject):
 class PipelineInstance(ArvadosObject):
     def components_runtime(self, arv):
         for cname in self.components:
-            runtimes = collections.defaultdict(datetime.timedelta)
+            node_times = collections.defaultdict(datetime.timedelta)
             try:
                 jobs = [Job(self.components[cname]['job'])]
             except KeyError:
                 continue
+            clock_time = jobs[0].clock_time()
             while jobs:
                 child_job_uuids = []
                 for job in jobs:
                     try:
-                        runtimes[job.node_size()] += job.runtime()
+                        node_times[job.node_size()] += job.node_time()
                     except TypeError:
                         continue  # Job didn't finish.
                     if job.have_child_jobs():
@@ -129,16 +133,17 @@ class PipelineInstance(ArvadosObject):
                             child_job_uuids.extend(job.child_jobs)
                 jobs = [Job(job_record) for job_record in arvados.util.list_all(
                     arv.jobs().list, filters=[['uuid', 'in', child_job_uuids]])]
-            yield cname, runtimes
+            yield cname, clock_time, node_times
 
     @staticmethod
     def _node_size_key(node_size):
         return (len(node_size), node_size)
 
     def components_runtime_csv(self, arv, outcsv):
-        for cname, runtimes in self.components_runtime(arv):
-            for node_size in sorted(runtimes, key=self._node_size_key):
-                outcsv.writerow([self.uuid, cname, node_size, runtimes[node_size]])
+        for cname, clock_time, node_times in self.components_runtime(arv):
+            for node_size in sorted(node_times, key=self._node_size_key):
+                outcsv.writerow([self.uuid, cname, clock_time,
+                                 node_times[node_size], node_size])
 
 
 def parse_arguments(arglist):
@@ -152,7 +157,7 @@ def main(stdin, stdout, stderr, arglist, arv):
                                        filters=[['uuid', 'in', args.uuids]])
     outcsv = csv.writer(stdout)
     outcsv.writerow(['Pipeline Instance UUID', 'Component Name',
-                     'Node Size', 'Total Runtime'])
+                     'Wall Clock Time', 'Node Allocation Time', 'Node Size'])
     for pi_record in pi_records:
         PipelineInstance(pi_record).components_runtime_csv(arv, outcsv)
 
