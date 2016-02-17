@@ -142,9 +142,16 @@ class PipelineInstance(ArvadosObject):
     def components_runtime_csv(self, arv, outcsv):
         for cname, clock_time, node_times in self.components_runtime(arv):
             for node_size in sorted(node_times, key=self._node_size_key):
-                outcsv.writerow([self.uuid, cname, clock_time,
-                                 node_times[node_size], node_size])
+                outcsv.writerow([self.uuid, cname,
+                                 timedelta_hms_str(clock_time),
+                                 timedelta_hms_str(node_times[node_size]),
+                                 node_size])
 
+
+def timedelta_hms_str(delta):
+    minutes, seconds = divmod(int(delta.total_seconds()), 60)
+    hours, minutes = divmod(minutes, 60)
+    return '{:d}:{:02d}:{:02d}'.format(hours, minutes, seconds)
 
 def parse_arguments(arglist):
     parser = argparse.ArgumentParser()
