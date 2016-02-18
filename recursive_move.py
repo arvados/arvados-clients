@@ -45,9 +45,11 @@ def uuid_class(uuid, arv):
     class_name = next(key for key, schema in arv._schema.schemas.iteritems()
                       if schema.get('uuidPrefix') == uuid_type)
     class_name = re.sub(r'(.)([A-Z])', r'\1_\2', class_name).lower()
+    underscore_count = class_name.count('_')
     arv_class_match = ''
     for arv_class in dir(arv):
         if (arv_class.startswith(class_name) and
+              (arv_class.count('_') == underscore_count) and
               (len(arv_class) > len(arv_class_match))):
             arv_class_match = arv_class
     return getattr(arv, arv_class_match)()
