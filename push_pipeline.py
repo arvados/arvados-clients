@@ -39,7 +39,6 @@ def excepthook(exc_type, exc_value, exc_tb):
         sys.exit(128 + signal.SIGINT)
     else:
         sys.__excepthook__(exc_type, exc_value, exc_tb)
-sys.excepthook = excepthook
 
 class PipelineConfig(ConfigParser.SafeConfigParser):
     def __init__(self, path):
@@ -200,4 +199,5 @@ def main(stdin, stdout, stderr, arglist):
         pipeline_config.save()
 
 if __name__ == '__main__':
+    sys.excepthook = excepthook
     main(sys.stdin, sys.stdout, sys.stderr, sys.argv[1:])
