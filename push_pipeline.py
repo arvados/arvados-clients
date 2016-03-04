@@ -7,6 +7,13 @@ Usage:
 An Arvados configuration file must exist at
 ~/.config/arvados/<dest>.conf.
 
+Otherwise, you can run this without any other up-front configuration.
+push_pipeline will prompt you for any information it needs, and save
+that to its configuration file for later use.
+
+If there is a remote named <dest>, push_pipeline will try to push to that.
+Otherwise, it will use the Git push URL saved in its configuration.
+
 Configuration is saved in `.git/arvados_pipeline.ini` in your checkout.
 You can share this with collaborators to make it easy for them to use
 push_pipeline.py on the same pipeline.  They just need to save the file
