@@ -144,8 +144,8 @@ def load_pipeline_config(conf_dir, cluster_id):
         pipeline_config.add_section(cluster_id)
     return pipeline_config
 
-def ask_template_path(prompter, stdout):
-    git_work_dir = os.path.realpath(get_git_dir('--show-toplevel'))
+def ask_template_path(prompter, stdout, git_work_dir):
+    git_work_dir = os.path.realpath(git_work_dir)
     while True:
         raw_path = prompter.ask(
             "Pipeline template file in this checkout",
@@ -168,6 +168,7 @@ def main(stdin, stdout, stderr, arglist):
     args = parse_arguments(arglist)
     prompter = Prompter(stdin if args.interactive else None, stdout, stderr)
     git_conf_dir = get_git_dir('--git-dir')
+    git_work_dir = get_git_dir('--show-toplevel')
     pipeline_config = load_pipeline_config(git_conf_dir, args.dest)
     cluster = Cluster(args.dest, pipeline_config.items(args.dest))
     if not os.path.exists(cluster.arv_conf_path):
@@ -176,15 +177,15 @@ def main(stdin, stdout, stderr, arglist):
         sys.exit(1)
     arvados.config.initialize(cluster.arv_conf_path)
 
-    template_path = pipeline_config.get_or_ask(
-        'DEFAULT', 'template_path', ask_template_path, prompter, stdout)
+    rel_template_path = pipeline_config.get_or_ask(
+        'DEFAULT', 'template_path', ask_template_path, prompter, stdout, git_work_dir)
     if cluster.template_uuid is None:
         cluster.template_uuid = prompter.ask(
             "Pipeline template UUID on " + args.dest,
             "No pipeline template UUID known on " + args.dest)
     setup_git(cluster, prompter)
 
-    with open(template_path) as pt_file:
+    with open(os.path.join(git_work_dir, rel_template_path)) as pt_file:
         pipeline_template = json.load(pt_file, object_pairs_hook=collections.OrderedDict)
     subprocess.check_call(['git', 'push', cluster.git_push_url] + args.refspecs)
     arv = api_from_config('v1', model=OrderedJsonModel())
