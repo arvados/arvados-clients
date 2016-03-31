@@ -94,8 +94,13 @@ class Job(ArvadosObject):
             return max(base, setting)
 
     def clock_time(self):
-        start_time = parse_ts(self.started_at)
-        end_time = parse_ts(self.finished_at)
+        try:
+            start_time = parse_ts(self.started_at)
+            end_time = parse_ts(self.finished_at or self.cancelled_at)
+        except TypeError:
+            # One of the time fields was None.  The job hasn't finished/started.
+            raise ValueError("job {} does not have start and end times".
+                             format(self.uuid))
         return end_time - start_time
 
     def node_time(self):
