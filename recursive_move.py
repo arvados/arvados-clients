@@ -38,24 +38,51 @@ def arv_walk(arv_obj, visit_func, *args, **kwargs):
     else:
         visit_func(arv_obj, *args, **kwargs)
 
-def uuid_class(uuid, arv):
-    if arvados.util.portable_data_hash_pattern.match(uuid):
-        return arv.collections()
-    _, uuid_type, _ = uuid.split('-')
-    class_name = next(key for key, schema in arv._schema.schemas.iteritems()
-                      if schema.get('uuidPrefix') == uuid_type)
-    class_name = re.sub(r'(.)([A-Z])', r'\1_\2', class_name).lower()
-    underscore_count = class_name.count('_')
-    arv_class_match = ''
-    for arv_class in dir(arv):
-        if (arv_class.startswith(class_name) and
-              (arv_class.count('_') == underscore_count) and
-              (len(arv_class) > len(arv_class_match))):
-            arv_class_match = arv_class
-    return getattr(arv, arv_class_match)()
+class UUIDMapper(object):
+    def __init__(self, arv):
+        self._prefix_to_class_names = {
+            schema['uuidPrefix']: self._api_to_class_name(api_name, arv)
+            for api_name, schema in arv._schema.schemas.iteritems()
+            if schema.get('uuidPrefix')}
+
+    def _api_to_class_name(self, api_name, arv):
+        class_name = re.sub(r'(.)([A-Z])', r'\1_\2', api_name).lower()
+        underscore_count = class_name.count('_')
+        arv_class_match = ''
+        for arv_class in dir(arv):
+            if (arv_class.startswith(class_name) and
+                  (arv_class.count('_') == underscore_count) and
+                  (len(arv_class) > len(arv_class_match))):
+                arv_class_match = arv_class
+        return arv_class_match
+
+    def class_name(self, uuid):
+        if arvados.util.portable_data_hash_pattern.match(uuid):
+            return 'collections'
+        uuid_type = uuid.split('-', 2)[1]
+        return self._prefix_to_class_names[uuid_type]
+
+    def arv_class(self, uuid, arv):
+        return getattr(arv, self.class_name(uuid))()
+
 
 class DependencyTracker(object):
-    def __init__(self, logger):
+    DEPENDENCY_CLASSES = {
+        'collections',
+        'containers',
+        'humans',
+        'jobs',
+        'job_tasks',
+        'links',
+        'pipeline_instances',
+        'pipeline_templates',
+        'repositories',
+        'specimens',
+        'traits',
+    }
+
+    def __init__(self, uuid_mapper, logger):
+        self.uuid_mapper = uuid_mapper
         self.logger = logger
         self.uuids = set()
         # Map UUIDs to objects
@@ -76,7 +103,7 @@ class DependencyTracker(object):
         return coll_key
 
     def add_object(self, uuid, arv):
-        arv_class = uuid_class(uuid, arv)
+        arv_class = self.uuid_mapper.arv_class(uuid, arv)
         arv_obj = self._send_request(arv_class.get(uuid=uuid))
         uuids = set()
         pdhs = set()
@@ -95,9 +122,8 @@ class DependencyTracker(object):
             pdhs.add(pdh_match.group(0))
             return
         match = arvados.util.uuid_pattern.match(item)
-        if (match and
-              not arvados.util.user_uuid_pattern.match(item) and
-              not arvados.util.group_uuid_pattern.match(item)):
+        if match and (self.uuid_mapper.class_name(match.group(0)) in
+                      self.DEPENDENCY_CLASSES):
             self.logger.debug("found UUID %s", match.group(0))
             uuids.add(match.group(0))
 
@@ -144,15 +170,15 @@ class DependencyTracker(object):
 
     def _move_uuids_to(self, owner_uuid, arv):
         for uuid in self.uuids:
-            obj_class = uuid_class(uuid, arv)
+            arv_class = self.uuid_mapper.arv_class(uuid, arv)
             self.logger.info("moving %s to %s", uuid, owner_uuid)
-            self._handle_request(obj_class.update(
+            self._handle_request(arv_class.update(
                 uuid=uuid, body={'owner_uuid': owner_uuid}))
 
     def _copy_object(self, src_obj, owner_uuid, arv):
         new_obj = self._clean_copy(src_obj)
         new_obj.update(owner_uuid=owner_uuid)
-        arv_class = uuid_class(src_obj['uuid'], arv)
+        arv_class = self.uuid_mapper.arv_class(src_obj['uuid'], arv)
         self._handle_request(arv_class.create(body=new_obj))
 
     def _copy_uuids_to(self, owner_uuid, arv):
@@ -192,7 +218,8 @@ def setup_logging(args):
 def main(stdin, stdout, stderr, arglist, arv):
     args = parse_arguments(arglist)
     setup_logging(args)
-    dependencies = DependencyTracker(logger)
+    uuid_mapper = UUIDMapper(arv)
+    dependencies = DependencyTracker(uuid_mapper, logger)
     for uuid in args.uuids:
         dependencies.add_object(uuid, arv)
     dependencies.move_to(args.destination, arv, args.request_handler)
