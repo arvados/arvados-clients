@@ -129,11 +129,15 @@ class DependencyTracker(object):
 
     def translate_pdhs_to_uuids(self, arv, pdhs, uuids, owner_uuid):
         all_uuids = self.uuids.union(self.copy_uuids).union(uuids)
+        missing_colls = []
         for pdh in pdhs:
             coll_list = arvados.util.list_all(
                 arv.collections().list,
                 filters=[['portable_data_hash', '=', pdh]],
                 select=['uuid', 'owner_uuid', 'name', 'created_at'])
+            if not coll_list:
+                missing_colls.append(pdh)
+                continue
             coll_uuids = [c['uuid'] for c in coll_list]
             self.add_dependency_links(arv, None, coll_uuids)
             if all_uuids.intersection(coll_uuids):
@@ -145,6 +149,10 @@ class DependencyTracker(object):
             self.logger.info("found %s from %s", pdh, src_uuid)
             self.copy_uuids[src_uuid] = src_coll
             all_uuids.add(src_uuid)
+        if missing_colls:
+            missing_colls.sort()
+            raise ValueError("Failed to find collection objects for {}".
+                             format(', '.join(missing_colls)))
 
     def add_dependency_links(self, arv, owner_uuid, uuids):
         for link_filter in itertools.product(['head_uuid', 'tail_uuid'],
