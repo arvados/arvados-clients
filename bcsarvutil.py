@@ -3,9 +3,32 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
+import datetime
 import re
 
 import arvados
+
+class JobLogLine(object):
+    @classmethod
+    def new_or_append(cls, line):
+        try:
+            new_line = cls(line)
+        except ValueError:
+            JobLogLine.last_line.text += line
+        else:
+            JobLogLine.last_line = new_line
+        return JobLogLine.last_line
+
+    def __init__(self, line):
+        timestamp, job_uuid, pid, task_num, text = line.split(' ', 4)
+        self.timestamp = datetime.datetime.strptime(timestamp, '%Y-%m-%d_%H:%M:%S')
+        if arvados.util.uuid_pattern.match(job_uuid) is None:
+            raise ValueError("{} not a UUID".format(job_uuid))
+        self.job_uuid = job_uuid
+        self.pid = int(pid)
+        self.task_num = int(task_num) if task_num else None
+        self.text = text
+
 
 class UUIDMapper(object):
     def __init__(self, arv):
