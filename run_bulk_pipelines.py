@@ -128,7 +128,7 @@ class PipelineRun(object):
         self.template_uuid = template_uuid
         self.parameters = ['{}={}'.format(key, parameters[key]) for key in parameters]
         if project_name is None:
-            keys = list(self.parameters)
+            keys = list(parameters)
             if not keys:
                 param_desc = "no parameters specified"
             else:
