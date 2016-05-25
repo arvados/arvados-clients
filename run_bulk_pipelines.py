@@ -156,7 +156,7 @@ class PipelineRun(object):
         except Exception as error:
             logger.warning("Failed to create project: %s", error,
                            exc_info=logger.isEnabledFor(logging.DEBUG))
-            self._save_error(error)
+            self.error = error
             return None
         else:
             return subproject['uuid']
