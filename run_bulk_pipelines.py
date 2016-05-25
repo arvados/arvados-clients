@@ -135,7 +135,8 @@ class PipelineRun(object):
                 param_desc = "no parameters specified"
             else:
                 keys.sort(key=lambda s: s.rsplit(':', 1)[-1])
-                param_desc = " ".join(parameters[key] for key in keys[:3])
+                param_desc = " ".join("{}={}".format(key, parameters[key])
+                                      for key in keys[:3])
             project_name = "Run with " + param_desc
         self.project_name = project_name
         self.dry_run = dry_run
