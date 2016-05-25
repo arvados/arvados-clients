@@ -10,8 +10,8 @@ each pipeline instance and its associated data, under the specified project.
 
 Each pipeline instance is started with parameters specified on the command
 line, using the same syntax as arv-run-pipeline-instance.  It also reads
-parameters from standard input by default, or one or more input files named
-with `--input`.  Each line of the input creates a new pipeline instance, with
+parameters from standard input by default, or an input files named with
+`--input`.  Each line of the input creates a new pipeline instance using
 the parameters on that line.  The input follows shell quoting rules, so if you
 need to include a literal newline, quote, or backslash in an input parameter,
 you can write that in the input the same way you would write it when you run
