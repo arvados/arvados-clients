@@ -56,8 +56,6 @@ import time
 
 import arvados
 
-from arvados.api import OrderedJsonModel
-
 logger = logging.getLogger('run_bulk_pipelines')
 
 class ParameterParser(shlex.shlex, object):
