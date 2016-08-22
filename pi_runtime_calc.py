@@ -27,6 +27,25 @@ import arvados
 
 from arvados.api import OrderedJsonModel
 from ciso8601 import parse_datetime_unaware as parse_ts
+import requests
+
+from bs4 import BeautifulSoup
+from urllib2 import urlopen
+import ast
+
+region = 'us-east' #populate with more regions
+node_prices = {}
+soup = BeautifulSoup(requests.get('https://azure.microsoft.com/en-us/pricing/details/virtual-machines/#Linux').text, 'lxml')
+for row in soup.findAll("tr", {"class" : "wa-row-divider"}):
+    for td in row.findAll('td'):
+        for instance in td.findAll("span", {"class" : "wa-badge wa-badge-blue wa-badge-long"}):
+            if instance.string.lstrip().replace(' ','') not in node_prices:
+                node_prices[instance.string.lstrip().replace(' ','')] = {}
+                for data in row.findAll("span", {"class" : "price-data "}):
+                    da = ast.literal_eval(data.get('data-amount'))
+                    for key in da['regional']:
+                        if key not in node_prices[instance.string.lstrip().replace(' ','')]:
+                            node_prices[instance.string.lstrip().replace(' ', '')][key] = da['regional'][key]
 
 class NodeSize(object):
     def __init__(self, name, cores, ram_mb):
@@ -145,12 +164,19 @@ class PipelineInstance(ArvadosObject):
         return (len(node_size), node_size)
 
     def components_runtime_csv(self, arv, outcsv):
+        total_node_price = 0
         for cname, clock_time, node_times in self.components_runtime(arv):
             for node_size in sorted(node_times, key=self._node_size_key):
+                node_time = timedelta_hms_str(node_times[node_size])
+                (h, m, s) = node_time.split(':')
+                node_dec = int(h) + int(m) / 60 + int(s) / 3600
+                total_node_price += node_prices[node_size][region]*node_dec
                 outcsv.writerow([self.uuid, cname,
                                  timedelta_hms_str(clock_time),
                                  timedelta_hms_str(node_times[node_size]),
-                                 node_size])
+                                 node_size,
+                                 round(node_prices[node_size][region]*node_dec,2),
+                                 round(total_node_price,2)])
 
 
 def timedelta_hms_str(delta):
@@ -169,7 +195,8 @@ def main(stdin, stdout, stderr, arglist, arv):
                                        filters=[['uuid', 'in', args.uuids]])
     outcsv = csv.writer(stdout)
     outcsv.writerow(['Pipeline Instance UUID', 'Component Name',
-                     'Wall Clock Time', 'Node Allocation Time', 'Node Size'])
+                     'Wall Clock Time', 'Node Allocation Time', 'Node Size', 'Job Price', 'Cumulative Price'])
+
     for pi_record in pi_records:
         PipelineInstance(pi_record).components_runtime_csv(arv, outcsv)
 
